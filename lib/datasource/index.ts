@@ -7,6 +7,7 @@ import * as memCache from '../util/cache/memory';
 import { clone } from '../util/clone';
 import * as allVersioning from '../versioning';
 import datasources from './api.generated';
+import { CdnJs } from './cdnjs';
 import {
   Datasource,
   DigestConfig,
@@ -20,11 +21,12 @@ import { addMetaData } from './metadata';
 export * from './common';
 
 export const getDatasources = (): Map<string, Datasource> => datasources;
-export const getDatasourceList = (): string[] => Array.from(datasources.keys());
 
 const cacheNamespace = 'datasource-releases';
 
-function load(datasource: string): Datasource {
+datasources.set('cdnjs', new CdnJs());
+
+function getDatasourceFor(datasource: string): Datasource {
   return datasources.get(datasource);
 }
 
@@ -165,11 +167,11 @@ async function fetchReleases(
   config: GetReleasesInternalConfig
 ): Promise<ReleaseResult | null> {
   const { datasource: datasourceName } = config;
-  if (!datasourceName || !datasources.has(datasourceName)) {
+  if (!datasourceName || getDatasourceFor(datasourceName) === undefined) {
     logger.warn('Unknown datasource: ' + datasourceName);
     return null;
   }
-  const datasource = load(datasourceName);
+  const datasource = getDatasourceFor(datasourceName);
   const registryUrls = resolveRegistryUrls(datasource, config.registryUrls);
   let dep: ReleaseResult = null;
   try {
@@ -274,14 +276,14 @@ export async function getPkgReleases(
 }
 
 export function supportsDigests(config: DigestConfig): boolean {
-  return 'getDigest' in load(config.datasource);
+  return 'getDigest' in getDatasourceFor(config.datasource);
 }
 
 export function getDigest(
   config: DigestConfig,
   value?: string
 ): Promise<string | null> {
-  const datasource = load(config.datasource);
+  const datasource = getDatasourceFor(config.datasource);
   const lookupName = config.lookupName || config.depName;
   const registryUrls = resolveRegistryUrls(datasource, config.registryUrls);
   return datasource.getDigest(
@@ -293,6 +295,6 @@ export function getDigest(
 export function getDefaultConfig(
   datasource: string
 ): Promise<Record<string, unknown>> {
-  const loadedDatasource = load(datasource);
+  const loadedDatasource = getDatasourceFor(datasource);
   return Promise.resolve(loadedDatasource?.defaultConfig || Object.create({}));
 }
